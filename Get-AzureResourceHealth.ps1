@@ -63,58 +63,66 @@ While ($stopFlag -eq $false) {
     $header = @{
         Authorization = "Bearer " + $accessToken
     }
+    try {
+        $timeStamp = [System.DateTime]::UtcNow
+        $restCallTimer = [System.Diagnostics.Stopwatch]::StartNew()
+        $resourceStatuses = Invoke-RestMethod -Method Get -Uri $restUri -Headers $header
+        $restCallTimer.Stop()
+        Write-Output ("Invoke Rest Method completed in: {0} hrs {1} min {2} sec {3} ms" -f $restCallTimer.Elapsed.Hours,$restCallTimer.Elapsed.Minutes,$restCallTimer.Elapsed.Seconds,$restCallTimer.Elapsed.Milliseconds)
 
-    $restCallTimer = [System.Diagnostics.Stopwatch]::StartNew()
-    $resourceStatuses = Invoke-RestMethod -Method Get -Uri $restUri -Headers $header
-    $restCallTimer.Stop()
-    Write-Output ("Invoke Rest Method completed in: {0} hrs {1} min {2} sec {3} ms" -f $restCallTimer.Elapsed.Hours,$restCallTimer.Elapsed.Minutes,$restCallTimer.Elapsed.Seconds,$restCallTimer.Elapsed.Milliseconds)
+        $parseTimer = [system.Diagnostics.Stopwatch]::StartNew()
+        $resourceTable = $resourceStatuses.value | Select-Object id,`
+            @{l="rowKey";e={(Get-StringHash -String $_.id -hashType SHA256)}},`
+            @{l="resourceProvider";e={($_.id -Split "/providers/")[1].Split("/")[0]}},`
+            @{l="resourceType";e={($_.id -Split "/providers/")[1].Split("/")[1]}},`
+            @{l="resourceName";e={($_.id -Split "/providers/")[1].Split("/")[2]}},`
+            @{l="resourceGroupName";e={($_.id -Split "/resourceGroups/")[1].Split("/")[0]}},`
+            @{l="availabilityState";e={$_.properties.availabilitystate}},`
+            @{l="title";e={$_.properties.title}},`
+            @{l="summary";e={$_.properties.summary}},`
+            @{l="reasonType";e={$_.properties.reasonType}},`
+            @{l="occuredTimeUTC";e={([DateTime]$_.properties.occuredTime).ToUniversalTime()}},`
+            @{l="reasonChronicity";e={$_.properties.reasonChronicity}},`
+            @{l="reportedTimeUTC";e={([DateTime]$_.properties.reportedTime).ToUniversalTime()}} -ExcludeProperty properties
+        $parseTimer.Stop()
+        Write-Output ("Resource Parsing completed in: {0} hrs {1} min {2} sec {3} ms" -f $parseTimer.Elapsed.Hours,$parseTimer.Elapsed.Minutes,$parseTimer.Elapsed.Seconds,$parseTimer.Elapsed.Milliseconds)
 
-    $parseTimer = [system.Diagnostics.Stopwatch]::StartNew()
-    $resourceTable = $resourceStatuses.value | Select-Object id,`
-        @{l="rowKey";e={(Get-StringHash -String $_.id -hashType SHA256)}},`
-        @{l="resourceProvider";e={($_.id -Split "/providers/")[1].Split("/")[0]}},`
-        @{l="resourceType";e={($_.id -Split "/providers/")[1].Split("/")[1]}},`
-        @{l="resourceName";e={($_.id -Split "/providers/")[1].Split("/")[2]}},`
-        @{l="resourceGroupName";e={($_.id -Split "/resourceGroups/")[1].Split("/")[0]}},`
-        @{l="availabilityState";e={$_.properties.availabilitystate}},`
-        @{l="title";e={$_.properties.title}},`
-        @{l="summary";e={$_.properties.summary}},`
-        @{l="reasonType";e={$_.properties.reasonType}},`
-        @{l="occuredTimeUTC";e={([DateTime]$_.properties.occuredTime).ToUniversalTime()}},`
-        @{l="reasonChronicity";e={$_.properties.reasonChronicity}},`
-        @{l="reportedTimeUTC";e={([DateTime]$_.properties.reportedTime).ToUniversalTime()}} -ExcludeProperty properties
-    $parseTimer.Stop()
-    Write-Output ("Resource Parsing completed in: {0} hrs {1} min {2} sec {3} ms" -f $parseTimer.Elapsed.Hours,$parseTimer.Elapsed.Minutes,$parseTimer.Elapsed.Seconds,$parseTimer.Elapsed.Milliseconds)
-
-    $addTableRowTimer = [System.Diagnostics.Stopwatch]::StartNew()
-    Foreach ($resource in $resourceTable) {
-        $tableParameters = [Ordered]@{
-            table = $storageTable
-            partitionKey = $resource.resourceType
-            rowKey = $resource.rowKey
-            property = [Ordered]@{
-                subscriptionId = $subscriptionId
-                resourceGroupName = $resource.ResourceGroupName
-                resourceProvider = $resource.resourceProvider
-                resourceType = $resource.resourceType
-                resourceName = $resource.resourceName
-                availabilityState = $resource.availabilityState
-                title = $resource.title
-                summary = $resource.summary
-                reasonType = $resource.reasonType
-                occuredTimeUTC = $resource.occuredTimeUTC
-                reasonChronicity = $resource.reasonChronicity
-                reportedTimeUTC = $resource.reportedTimeUTC
-                resourceId = $resource.id
+        $addTableRowTimer = [System.Diagnostics.Stopwatch]::StartNew()
+        Foreach ($resource in $resourceTable) {
+            $tableParameters = [Ordered]@{
+                table = $storageTable
+                partitionKey = $resource.resourceType
+                rowKey = $resource.rowKey
+                property = [Ordered]@{
+                    lastRunTimestamp = $timeStamp
+                    subscriptionId = $subscriptionId
+                    resourceGroupName = $resource.ResourceGroupName
+                    resourceProvider = $resource.resourceProvider
+                    resourceType = $resource.resourceType
+                    resourceName = $resource.resourceName
+                    availabilityState = $resource.availabilityState
+                    title = $resource.title
+                    summary = $resource.summary
+                    reasonType = $resource.reasonType
+                    occuredTimeUTC = $resource.occuredTimeUTC
+                    reasonChronicity = $resource.reasonChronicity
+                    reportedTimeUTC = $resource.reportedTimeUTC
+                    resourceId = $resource.id
+                }
             }
-        }
 
-        Add-StorageTableRow @tableParameters -UpdateExisting | Out-Null
+            Add-StorageTableRow @tableParameters -UpdateExisting | Out-Null
+        }
+        $addTableRowTimer.Stop()
+        Write-Output ("Adding Resources to Table completed in: {0} hrs {1} min {2} sec {3} ms" -f $addTableRowTimer.Elapsed.Hours,$addTableRowTimer.Elapsed.Minutes,$addTableRowTimer.Elapsed.Seconds,$addTableRowTimer.Elapsed.Milliseconds)
+        Write-Output ("Current runbook duration: {0} hrs {1} min {2} sec {3} ms" -f $stopWatch.Elapsed.Hours,$stopWatch.Elapsed.Minutes,$stopWatch.Elapsed.Seconds,$stopWatch.Elapsed.Milliseconds)
     }
-    $addTableRowTimer.Stop()
-    Write-Output ("Adding Resources to Table completed in: {0} hrs {1} min {2} sec {3} ms" -f $addTableRowTimer.Elapsed.Hours,$addTableRowTimer.Elapsed.Minutes,$addTableRowTimer.Elapsed.Seconds,$addTableRowTimer.Elapsed.Milliseconds)
-    Write-Output ("Current runbook duration: {0} hrs {1} min {2} sec {3} ms" -f $stopWatch.Elapsed.Hours,$stopWatch.Elapsed.Minutes,$stopWatch.Elapsed.Seconds,$stopWatch.Elapsed.Milliseconds)
-    
+    catch [System.Net.WebException] {
+        Write-Warning ("Triggered System.Net.WebException")
+        Write-Warning @_
+    }
+    catch {$PSCmdlet.ThrowTerminatingError($PSItem)}
+
     If ($stopWatch.Elapsed.TotalMinutes -ge $maxRunTime.TotalMinutes) {
         Write-Output ("Max ticks elapsed, setting Stop Flag to TRUE")
         $stopFlag = $true
@@ -124,7 +132,7 @@ While ($stopFlag -eq $false) {
         Write-Output ("Runbook runtime remaining: {0} min {1} sec {2} ms" -f $elapsedTimeRemaining.Minutes,$elapsedTimeRemaining.Seconds,$elapsedTimeRemaining.Milliseconds)
     }
     Write-Output "Sleeping for 120 Seconds"...
-    Start-Sleep -seconds 120
+    Start-Sleep -seconds 15
 }
 $Stopwatch.Stop()
 
