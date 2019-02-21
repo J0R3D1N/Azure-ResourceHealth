@@ -19,7 +19,7 @@ Function Get-StringHash {
 }
 
 $stopWatch = [System.Diagnostics.Stopwatch]::StartNew()
-$maxTicks = ([System.TimeSpan]::FromMinutes(55)).Ticks
+$maxRunTime = [System.TimeSpan]::FromMinutes(55)
 
 try {
     # Get the connection "AzureRunAsConnection "
@@ -52,7 +52,7 @@ $restUri = ('https://management.usgovcloudapi.net/subscriptions/{0}/Providers/Mi
 $iterationCounter = 0
 $stopFlag = $false
 
-While ($stopFlag -eq $false)
+While ($stopFlag -eq $false) {
     $iterationCounter++
     Write-Output ("`n`rStarting Resource Health Tracking: Iteration {0}" -f $iterationCounter)
     $azureContext = Get-AzureRmContext
@@ -114,14 +114,17 @@ While ($stopFlag -eq $false)
     $addTableRowTimer.Stop()
     Write-Output ("Adding Resources to Table completed in: {0} hrs {1} min {2} sec {3} ms" -f $addTableRowTimer.Elapsed.Hours,$addTableRowTimer.Elapsed.Minutes,$addTableRowTimer.Elapsed.Seconds,$addTableRowTimer.Elapsed.Milliseconds)
     Write-Output ("Current runbook duration: {0} hrs {1} min {2} sec {3} ms" -f $stopWatch.Elapsed.Hours,$stopWatch.Elapsed.Minutes,$stopWatch.Elapsed.Seconds,$stopWatch.Elapsed.Milliseconds)
-    Write-Output ("Elapsed Ticks: {0} | Max Ticks: {1}" -f $stopWatch.ElapsedTicks,$maxTicks)
-
-    If ($stopWatch.ElapsedTicks -ge $maxTicks) {
+    
+    If ($stopWatch.Elapsed.TotalMinutes -ge $maxRunTime.TotalMinutes) {
         Write-Output ("Max ticks elapsed, setting Stop Flag to TRUE")
         $stopFlag = $true
     }
-
-    Start-Sleep -seconds 60
+    Else {
+        $elapsedTimeRemaining = $maxRunTime - $stopWatch.Elapsed
+        Write-Output ("Runbook runtime remaining: {0} min {1} sec {2} ms" -f $elapsedTimeRemaining.Minutes,$elapsedTimeRemaining.Seconds,$elapsedTimeRemaining.Milliseconds)
+    }
+    Write-Output "Sleeping for 120 Seconds"...
+    Start-Sleep -seconds 120
 }
 $Stopwatch.Stop()
 
