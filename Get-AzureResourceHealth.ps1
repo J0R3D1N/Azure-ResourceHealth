@@ -56,7 +56,7 @@ While ($stopFlag -eq $false)
     $iterationCounter++
     Write-Output ("`n`rStarting Resource Health Tracking: Iteration {0}" -f $iterationCounter)
     $azureContext = Get-AzureRmContext
-    #$tenantId = (Get-AzureRmSubscription -SubscriptionId $subscriptionId).TenantId
+    $tenantId = (Get-AzureRmSubscription -SubscriptionId $subscriptionId).TenantId
     $tokenCache = $azureContext.TokenCache
     $cachedTokens = $tokenCache.ReadItems() | Where-Object {$_.TenantId -eq $tenantId} | Sort-Object -Property ExpiresOn -Descending
     $accessToken = $cachedTokens[0].AccessToken
@@ -72,9 +72,10 @@ While ($stopFlag -eq $false)
     $parseTimer = [system.Diagnostics.Stopwatch]::StartNew()
     $resourceTable = $resourceStatuses.value | Select-Object id,`
         @{l="rowKey";e={(Get-StringHash -String $_.id -hashType SHA256)}},`
-        @{l="ResourceProvider";e={($_.id -Split "/providers/")[1].Split("/")[0]}},`
-        @{l="ResourceType";e={($_.id -Split "/providers/")[1].Split("/")[1]}},`
-        @{l="ResourceName";e={($_.id -Split "/providers/")[1].Split("/")[2]}},`
+        @{l="resourceProvider";e={($_.id -Split "/providers/")[1].Split("/")[0]}},`
+        @{l="resourceType";e={($_.id -Split "/providers/")[1].Split("/")[1]}},`
+        @{l="resourceName";e={($_.id -Split "/providers/")[1].Split("/")[2]}},`
+        @{l="resourceGroupName";e={($_.id -Split "/resourceGroups/")[1].Split("/")[0]}},`
         @{l="availabilityState";e={$_.properties.availabilitystate}},`
         @{l="title";e={$_.properties.title}},`
         @{l="summary";e={$_.properties.summary}},`
@@ -87,12 +88,13 @@ While ($stopFlag -eq $false)
 
     $addTableRowTimer = [System.Diagnostics.Stopwatch]::StartNew()
     Foreach ($resource in $resourceTable) {
-        $tableParameters = @{
+        $tableParameters = [Ordered]@{
             table = $storageTable
             partitionKey = $resource.resourceType
             rowKey = $resource.rowKey
-            property = @{
-                resourceId = $resource.id
+            property = [Ordered]@{
+                subscriptionId = $subscriptionId
+                resourceGroupName = $resource.ResourceGroupName
                 resourceProvider = $resource.resourceProvider
                 resourceType = $resource.resourceType
                 resourceName = $resource.resourceName
@@ -103,6 +105,7 @@ While ($stopFlag -eq $false)
                 occuredTimeUTC = $resource.occuredTimeUTC
                 reasonChronicity = $resource.reasonChronicity
                 reportedTimeUTC = $resource.reportedTimeUTC
+                resourceId = $resource.id
             }
         }
 
