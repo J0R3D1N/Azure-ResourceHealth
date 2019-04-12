@@ -56,13 +56,14 @@ While ($stopFlag -eq $false) {
     $iterationCounter++
     Write-Output ("`n`rStarting Resource Health Tracking: Iteration {0}" -f $iterationCounter)
     $azureContext = Get-AzureRmContext
-    $tenantId = (Get-AzureRmSubscription -SubscriptionId $subscriptionId).TenantId
+    #$tenantId = (Get-AzureRmSubscription -SubscriptionId $subscriptionId).TenantId
     $tokenCache = $azureContext.TokenCache
-    $cachedTokens = $tokenCache.ReadItems() | Where-Object {$_.TenantId -eq $tenantId} | Sort-Object -Property ExpiresOn -Descending
+    $cachedTokens = $tokenCache.ReadItems() | Sort-Object -Property ExpiresOn -Descending
     $accessToken = $cachedTokens[0].AccessToken
     $header = @{
         Authorization = "Bearer " + $accessToken
     }
+
     try {
         $timeStamp = [System.DateTime]::UtcNow
         $restCallTimer = [System.Diagnostics.Stopwatch]::StartNew()
@@ -131,8 +132,8 @@ While ($stopFlag -eq $false) {
         $elapsedTimeRemaining = $maxRunTime - $stopWatch.Elapsed
         Write-Output ("Runbook runtime remaining: {0} min {1} sec {2} ms" -f $elapsedTimeRemaining.Minutes,$elapsedTimeRemaining.Seconds,$elapsedTimeRemaining.Milliseconds)
     }
-    Write-Output "Sleeping for 120 Seconds"...
-    Start-Sleep -seconds 15
+    Write-Output "Starting 3 minute sleep operation..."
+    Start-Sleep -seconds 180
 }
 $Stopwatch.Stop()
 
